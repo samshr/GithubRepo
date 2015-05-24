@@ -1,0 +1,103 @@
+---
+title: "Predicting using Exercise Manner"
+author: "SS"
+date: "Sunday, May 24, 2015"
+output: html_document
+---
+
+#Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, goal is to predict the manner in which they did the exercise using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.They were asked to perform barbell lifts correctly and incorrectly in 5 different ways;
+
+A: exactly according to the specification 
+B: throwing the elbows to the front
+C: lifting the dumbbell only halfway 
+D: lowering the dumbbell only halfway
+E: throwing the hips to the front
+
+
+```{r setoptions}
+require(knitr); require(kernlab); require(caret);require(randomForest); require(ggplot2)
+opts_chunk$set(cache=FALSE)
+```
+
+#Data Processing
+
+```{r}
+setInternet2(use = TRUE)
+download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', 'pml-training.csv')
+download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv','pml-test.csv')
+training <- read.csv('pml-training.csv', na.strings= c("NA",""," ","#DIV/0!"))
+testing <- read.csv('pml-test.csv', na.strings= c("NA",""," ","#DIV/0!"))
+dim(training); dim(testing);table(training$classe); 
+qplot(training$classe, main="Levels of Activity", xlab="classe levels", ylab="Frequency")
+```
+
+Next, we will clean data before we create any model. There are lots of NA values and also first 7 variables are either identifier or timestamp or data not relating to belt, forearm, arm, and dumbell which does not contribute anything to model we are going to create.
+
+```{r}
+# cleaning data 
+na_training <- apply(training, 2, function(x) {sum(is.na(x))})
+training_clean <- training[,which(na_training == 0)]
+
+na_testing <- apply(testing, 2, function(x) {sum(is.na(x))})
+testing_clean <- testing[,which(na_testing == 0)]
+# removing id & timestamps
+training_clean = training_clean[,-c(1:7)]
+testing_clean = testing_clean[,-c(1:7)]
+dim(training_clean); dim(testing_clean)
+```
+
+#Splitting data into training and validation
+Next, we will split data set into training and cross validation sets in a 60:40 ratio.
+
+```{r}
+# split the cleaned testing data into training and cross validation
+set.seed(1234)
+inTrain <- createDataPartition(y = training_clean$classe, p = 0.6, list = FALSE)
+training_new <- training_clean[inTrain, ]
+validation <- training_clean[-inTrain, ]
+```
+
+#Model
+
+```{r}
+#Fitting Random Forest
+modFit <- randomForest(classe~ .,data=training_new, method="rf")
+saveRDS(modFit, "rdsmodel.RDS")
+modFit <- readRDS("rdsmodel.RDS")
+modFit
+
+#Important Variable
+varImp(modFit)
+
+#Confusion Matrix
+trainingPred <- predict(modFit, training_new)
+confusionMatrix(training_new$classe, trainingPred)
+```
+
+#Cross-validation
+
+Next, we will use model in remaining 40% of data to classify prediction. A confusion matrix shows that the accuracy of the model.
+
+```{r}
+# crossvalidate the model using the remaining 40% of data
+crossVal <- predict(modFit, validation)
+confusionMatrix(validation$classe, crossVal)
+```
+
+Above confustion matrix shows 99.3% prediction accuracy which is considered as a robust and accurate to predict data. The estimated out of sample error is 0.07.
+
+#Predictions
+
+We will then use this model to predit the classifications of the 20 results of testing data.
+
+```{r}
+# predict the classes of the test set
+predictTest <- predict(modFit, testing_clean)
+predictTest
+```
+
+#Conclusions
+
+Using random forest model we can predict how well a person is preforming an excercise. 
